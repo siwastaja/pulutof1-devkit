@@ -1,0 +1,63 @@
+PULUTOF1 4-sensor Development Kit
+
+
+Features:
+
+* 3D Time-of-Flight distance measurement
+
+* 4 sensors connected to the master with flat flex cables. Maximum recommended cable length 500mm.
+
+* 160x60 distance measurement pixel per sensor
+* 110x46 degree field of view per sensor
+* 28 W peak optical power on 850 nm NIR
+* Minimum distance 100 mm
+* Maximum distance 4-5 meters typical depending on conditions
+
+* Works in sunlight (with reduced accuracy and range in direct, strong sunlight)
+* Dealiasing, interference detection & removal, "mid-lier" (flying pixel) removal, for fault-free point cloud, especially designed for mobile robot obstacle mapping
+* Temperature compensation
+* Offset calibration
+* 3-level HDR (High Dynamic Range) imaging
+* Modulated stray light estimation & compensation
+
+* 2 frames per second per sensor (8 FPS total for 4 sensors) in standard configuration. Can be upgraded to 4-5 FPS.
+
+* Connects to most single-board computers with SPI interface
+* Specifically designed to work as a HAT (hardware attachment) for Raspberry Pi 3
+
+* Open source (GPL2) low-level firmware allows working around application-specific requirements, formerly very difficult to deal with
+* Open source (GPL2) example linux software (in C) works as the application development basis
+* The software saves .xyz or .csv files out of box on the Raspberry Pi
+
+
+
+Specifications:
+
+Power supplies:
+
+Input power supply: 18V to 24V, at least 1.2A
+Raspberry Pi 3: 5V, at least 2.0A recommended
+Logic power supply: 3.3V, at least 100mA (factory connected to Raspberry Pi's internal 3.3V supply)
+
+
+Mechanical:
+
+* Mounting on standard tripod screw 1/4"-20
+* Mounting on standard M4 screws
+* Can be mounted in two ways (90 degree rotation)
+
+
+
+Quick manual:
+
+Software-triggered reset:
+./spiprog r
+
+
+Firmware update:
+./spiprog r new_firmware.bin
+
+
+Acquiring samples in xyz format:
+./main asdfghjk something
+
