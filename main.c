@@ -192,6 +192,7 @@ void* main_thread()
 		tof3d_scan_t *p_tof;
 		if( (p_tof = get_tof3d()) )
 		{
+			printf("yesbox\n");
 			save_pointcloud(p_tof->n_points, p_tof->cloud);
 
 			if(tcp_client_sock >= 0)
