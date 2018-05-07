@@ -443,8 +443,6 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 
 	int sidx = in->sensor_idx;
 
-			printf("sidx = %d\n", sidx);
-
 	if(sidx > NUM_PULUTOFS-1)
 	{
 		printf("WARNING:process_pulutof_frame: illegal sensor idx coming from hw.\n");
@@ -467,36 +465,27 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 
 	if(running_ok)
 	{
-		if(calibrating)
+		distances_to_objmap(in);
+
+
+		printf("sidx = %d\n", sidx);
+
+		if(sidx == 2)
 		{
-			if(calib_sensor_idx == sidx)
-			{
-				distances_to_objmap(in);
-			}
+			tof3ds[tof3d_wr].robot_pos = in->robot_pos;
 		}
-		else
+
+		if(sidx == send_raw_tof)
 		{
-			distances_to_objmap(in);
+			memcpy(tof3ds[tof3d_wr].raw_depth, in->depth, sizeof tof3ds[tof3d_wr].raw_depth);
+		}
 
+		memcpy(tof3ds[tof3d_wr].ampl_images[sidx], in->ampl, sizeof in->ampl);
 
-
-			if(sidx == 2)
-			{
-				tof3ds[tof3d_wr].robot_pos = in->robot_pos;
-			}
-
-			if(sidx == send_raw_tof)
-			{
-				memcpy(tof3ds[tof3d_wr].raw_depth, in->depth, sizeof tof3ds[tof3d_wr].raw_depth);
-			}
-
-			memcpy(tof3ds[tof3d_wr].ampl_images[sidx], in->ampl, sizeof in->ampl);
-
-			if(sidx == NUM_PULUTOFS-1)
-			{
-				// All sensors done.
-				tof3d_wr++; if(tof3d_wr >= TOF3D_RING_BUF_LEN) tof3d_wr = 0;
-			}
+		if(sidx == NUM_PULUTOFS-1)
+		{
+			// All sensors done.
+			tof3d_wr++; if(tof3d_wr >= TOF3D_RING_BUF_LEN) tof3d_wr = 0;
 		}
 	}
 
