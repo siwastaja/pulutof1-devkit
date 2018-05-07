@@ -423,6 +423,7 @@ void* pulutof_processing_thread()
 		pulutof_frame_t* p_tof;
 		if( (p_tof = get_pulutof_frame()) )
 		{
+			printf("Processing!");
 			process_pulutof_frame(p_tof);
 		}
 		else
