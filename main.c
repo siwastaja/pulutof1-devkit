@@ -36,7 +36,9 @@
 #include <time.h>
 #include <pthread.h>
 
-#include "datatypes.h"
+#include "tcp_comm.h"
+#include "tcp_parser.h"
+
 #include "pulutof.h"
 
 volatile int verbose_mode = 0;
@@ -90,6 +92,7 @@ void* main_thread()
 		fprintf(stderr, "TCP communication initialization failed.\n");
 		return NULL;
 	}
+
 	while(1)
 	{
 		// Calculate fd_set size (biggest fd+1)
@@ -124,25 +127,17 @@ void* main_thread()
 			}
 			if(cmd == 'z')
 			{
-				pulutof_decr_dbg();
-			}
-			if(cmd == 'x')
-			{
-				pulutof_incr_dbg();
-			}
-			if(cmd == 'Z')
-			{
 				if(send_raw_tof >= 0) send_raw_tof--;
 				printf("Sending raw tof from sensor %d\n", send_raw_tof);
 			}
-			if(cmd == 'X')
+			if(cmd == 'x')
 			{
 				if(send_raw_tof < 3) send_raw_tof++;
 				printf("Sending raw tof from sensor %d\n", send_raw_tof);
 			}
-			if(cmd >= '1' && cmd <= '4')
+			if(cmd >= '0' && cmd <= '3')
 			{
-				pulutof_cal_offset(cmd-'1');
+				pulutof_cal_offset(cmd);
 			}
 			if(cmd == 'p')
 			{
@@ -164,9 +159,24 @@ void* main_thread()
 			}
 		}
 
+
+
+
 		if(tcp_client_sock >= 0 && FD_ISSET(tcp_client_sock, &fds))
 		{
 			int ret = handle_tcp_client();
+			if(ret == TCP_CR_MAINTENANCE_MID)
+			{
+				if(msg_cr_maintenance.magic == 0x12345678)
+				{
+					retval = msg_cr_maintenance.retval;
+					break;
+				}
+				else
+				{
+					printf("WARN: Illegal maintenance message magic number 0x%08x.\n", msg_cr_maintenance.magic);
+				}
+			}		
 		}
 
 		if(FD_ISSET(tcp_listener_sock, &fds))
@@ -174,110 +184,21 @@ void* main_thread()
 			handle_tcp_listener();
 		}
 
-#ifdef PULUTOF1_GIVE_RAWS
 
-		pulutof_frame_t* p_tof;
-		if( (p_tof = get_pulutof_frame()) )
-		{
-			if(tcp_client_sock >= 0)
-			{
-#ifdef PULUTOF_EXTRA
-				tcp_send_picture(p_tof->dbg_id, 2, 160, 60, p_tof->dbg);
-#endif
-				tcp_send_picture(100,           2, 160, 60, (uint8_t*)p_tof->depth);
-#ifdef PULUTOF_EXTRA
-				tcp_send_picture(110,           2, 160, 60, (uint8_t*)p_tof->uncorrected_depth);
-#endif
-			}
-
-		}
-
-#else
 		tof3d_scan_t *p_tof;
 		if( (p_tof = get_tof3d()) )
 		{
+			save_pointcloud(p_tof->n_points, p_tof->cloud);
 
 			if(tcp_client_sock >= 0)
 			{
-				static int hmap_cnt = 0;
-				hmap_cnt++;
-
-				if(hmap_cnt >= 4)
+				if(send_raw_tof >= 0 && send_raw_tof < 4)
 				{
-					tcp_send_hmap(TOF3D_HMAP_XSPOTS, TOF3D_HMAP_YSPOTS, p_tof->robot_pos.ang, p_tof->robot_pos.x, p_tof->robot_pos.y, TOF3D_HMAP_SPOT_SIZE, p_tof->objmap);
-
-					if(send_raw_tof >= 0 && send_raw_tof < 4)
-					{
-						tcp_send_picture(100, 2, 160, 60, (uint8_t*)p_tof->raw_depth);
-						tcp_send_picture(101, 2, 160, 60, (uint8_t*)p_tof->ampl_images[send_raw_tof]);
-					}
-
-					hmap_cnt = 0;
-
-					if(send_pointcloud)
-					{
-						save_pointcloud(p_tof->n_points, p_tof->cloud);
-					}
+					tcp_send_picture(100, 2, 160, 60, (uint8_t*)p_tof->raw_depth);
+					tcp_send_picture(101, 2, 160, 60, (uint8_t*)p_tof->ampl_images[send_raw_tof]);
 				}
 			}
 
-			static int32_t prev_x, prev_y, prev_ang;
-
-			if(state_vect.v.mapping_3d && !pwr_status.charging && !pwr_status.charged)
-			{
-				if(p_tof->robot_pos.x != 0 || p_tof->robot_pos.y != 0 || p_tof->robot_pos.ang != 0)
-				{
-					int robot_moving = 0;
-					if((prev_x != p_tof->robot_pos.x || prev_y != p_tof->robot_pos.y || prev_ang != p_tof->robot_pos.ang))
-					{
-						prev_x = p_tof->robot_pos.x; prev_y = p_tof->robot_pos.y; prev_ang = p_tof->robot_pos.ang;
-						robot_moving = 1;
-					}
-
-					static int n_tofs_to_map = 0;
-					static tof3d_scan_t* tofs_to_map[25];
-
-					tofs_to_map[n_tofs_to_map] = p_tof;
-					n_tofs_to_map++;
-
-					if(n_tofs_to_map >= (robot_moving?3:20))
-					{
-						int32_t mid_x, mid_y;
-						map_3dtof(&world, n_tofs_to_map, tofs_to_map, &mid_x, &mid_y);
-
-						if(do_follow_route)
-						{
-							int px, py, ox, oy;
-							page_coords(mid_x, mid_y, &px, &py, &ox, &oy);
-
-							for(int ix=-1; ix<=1; ix++)
-							{
-								for(int iy=-1; iy<=1; iy++)
-								{
-									gen_routing_page(&world, px+ix, py+iy, 0);
-								}
-							}
-						}
-
-						n_tofs_to_map = 0;
-					}
-				}
-			}
-
-		}
-#endif
-
-		static double prev_sync = 0;
-		double stamp;
-
-		double write_interval = 30.0;
-		if(tcp_client_sock >= 0)
-			write_interval = 7.0;
-
-		if( (stamp=subsec_timestamp()) > prev_sync+write_interval)
-		{
-			prev_sync = stamp;
-			fflush(stdout); // syncs log file.
 		}
 
 	}

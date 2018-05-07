@@ -25,7 +25,20 @@
 #ifndef PULUTOF_H
 #define PULUTOF_H
 
-#include "datatypes.h" // for pos_t
+
+typedef struct __attribute__((packed))
+{
+	int32_t ang; // int32_t range --> -180..+180 deg; let it overflow freely. 1 unit = 83.81903171539 ndeg
+	int32_t x;   // in mm
+	int32_t y;
+} pos_t;
+
+typedef struct __attribute__((packed))
+{
+	int32_t x;
+	int32_t y;
+	int32_t z;
+} xyz_t;
 
 
 #define PULUTOF_STATUS_OVERFLOW  253

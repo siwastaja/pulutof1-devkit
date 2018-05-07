@@ -45,6 +45,7 @@
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "pulutof.h"
 
@@ -248,7 +249,13 @@ typedef struct
 
 #define NUM_PULUTOFS 4
 
-#ifdef PULUTOF_ROBOT_SER_1_TO_4  // Retrofitted sensors
+#ifndef M_PI
+#define M_PI 3.14159265358979
+#endif
+
+#define RADTODEG(x) ((x)*(360.0/(2.0*M_PI)))
+#define DEGTORAD(x) ((x)*((2.0*M_PI)/360.0))
+
 static const sensor_mount_t sensor_mounts[NUM_PULUTOFS] =
 {          //      mountmode    x     y       hor ang           ver ang      height    
  /*0: Left rear      */ { 2,  -276,  -233, DEGTORAD(      90), DEGTORAD(  0), 227 },
@@ -256,25 +263,6 @@ static const sensor_mount_t sensor_mounts[NUM_PULUTOFS] =
  /*2: Right front    */ { 2,   154,   164, DEGTORAD(       0), DEGTORAD(  0), 228 },
  /*3: Left front     */ { 1,   154,  -164, DEGTORAD(       0), DEGTORAD(  0), 228 }
 };
-#endif
-
-#ifdef PULUTOF_ROBOT_SER_5_UP
-static const sensor_mount_t sensor_mounts[NUM_PULUTOFS] =
-{          //      mountmode    x     y       hor ang           ver ang      height    
- /*0: Left rear      */ { 2,  -183,  -218, DEGTORAD(90  + 30), DEGTORAD( 0), 234 },
- /*1: Right rear     */ { 1,  -183,   218, DEGTORAD(270 - 30), DEGTORAD( 0), 234 },
- /*2: Right front    */ { 1,   138,   115, DEGTORAD(     -10), DEGTORAD(10), 170 },
- /*3: Left front     */ { 2,   138,  -115, DEGTORAD(     +10), DEGTORAD(10), 170 }
-};
-#endif
-
-int32_t hmap_accum[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
-int16_t hmap_nsamples[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
-int16_t hmap[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
-static int32_t hmap_calib_accum[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
-static int16_t hmap_calib_cnt[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
-static int16_t hmap_calib[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
-int16_t hmap_avgd[TOF3D_HMAP_XSPOTS][TOF3D_HMAP_YSPOTS];
 
 static void distances_to_objmap(pulutof_frame_t *in)
 {
@@ -307,10 +295,8 @@ static void distances_to_objmap(pulutof_frame_t *in)
 
 
 	for(int pyy = 1; pyy < TOF_YS-1; pyy++)
-//	for(int pyy = 25; pyy < 35; pyy++)
 	{
 		for(int pxx = 1; pxx < TOF_XS-1; pxx++)
-//		for(int pxx = 75; pxx < 85; pxx++)
 		{
 			int n_valids = 0;
 			int avg = 0;
@@ -389,77 +375,32 @@ static void distances_to_objmap(pulutof_frame_t *in)
 					float y = -1* (d * cos(ver_ang + sensor_yang) * sin(hor_ang + sensor_ang)) + sensor_y;
 					float z = d * sin(ver_ang + sensor_yang) + sensor_z;
 
-					if(z > 700 || (z > -180.0 && z < 130.0) || (n_valids > 7 && n_conforming > 5))
+
+					//printf("DIST = %.0f  x=%.0f  y=%.0f  z=%.0f  xspot=%d  yspot=%d  ver_ang=%.2f  sensor_yang=%.2f  hor_ang=%.2f  sensor_ang=%.2f\n", d, x, y, z, xspot, yspot, ver_ang, sensor_yang, hor_ang, sensor_ang); 
+
+					if(do_send_pointcloud == 1) // relative to robot
 					{
-						// Data proving level floor is accepted with fewer samples
-						// High-z data is also accepted with fewer samples; else we miss obvious small high obstacles
-						// Otherwise, we require enough samples to be sure.
-
-						int xspot = (int)(x / (float)TOF3D_HMAP_SPOT_SIZE) + TOF3D_HMAP_XMIDDLE;
-						int yspot = (int)(y / (float)TOF3D_HMAP_SPOT_SIZE) + TOF3D_HMAP_YMIDDLE;
-
-						//printf("DIST = %.0f  x=%.0f  y=%.0f  z=%.0f  xspot=%d  yspot=%d  ver_ang=%.2f  sensor_yang=%.2f  hor_ang=%.2f  sensor_ang=%.2f\n", d, x, y, z, xspot, yspot, ver_ang, sensor_yang, hor_ang, sensor_ang); 
-
-						if(xspot < 0 || xspot >= TOF3D_HMAP_XSPOTS || yspot < 0 || yspot >= TOF3D_HMAP_YSPOTS)
+						if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
 						{
-							//ignored++;
-							continue;
+							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x;
+							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y;
+							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
+							tof3ds[tof3d_wr].n_points++;
 						}
-
-	/*					int zi = z;
-						if(zi > -2000 && zi < 2000)
+					}
+					else if(do_send_pointcloud == 2) // in world coordinates
+					{
+						if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
 						{
-							if(zi > hmap_accum[xspot][yspot])
-								hmap_accum[xspot][yspot] = zi;
-							hmap_nsamples[xspot][yspot]++;
+							float robot_ang = 0;
+							float x_world = d * cos(ver_ang + sensor_yang) * cos(hor_ang + sensor_ang + robot_ang) + sensor_x + in->robot_pos.x;
+							float y_world = -1* (d * cos(ver_ang + sensor_yang) * sin(hor_ang + sensor_ang + robot_ang)) + sensor_y + in->robot_pos.y;
+
+							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x_world;
+							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y_world;
+							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
+							tof3ds[tof3d_wr].n_points++;
 						}
-	*/
-
-						if(do_send_pointcloud == 1) // relative to robot
-						{
-							if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
-							{
-								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x;
-								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y;
-								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
-								tof3ds[tof3d_wr].n_points++;
-							}
-						}
-						else if(do_send_pointcloud == 2) // in world coordinates
-						{
-							if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
-							{
-								float robot_ang = ANG32TORAD(-1*in->robot_pos.ang);
-								float x_world = d * cos(ver_ang + sensor_yang) * cos(hor_ang + sensor_ang + robot_ang) + sensor_x + in->robot_pos.x;
-								float y_world = -1* (d * cos(ver_ang + sensor_yang) * sin(hor_ang + sensor_ang + robot_ang)) + sensor_y + in->robot_pos.y;
-
-								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x_world;
-								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y_world;
-								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
-								tof3ds[tof3d_wr].n_points++;
-							}
-						}
-
-						uint8_t new_val = 0;
-						if( z < -230.0)
-							new_val = TOF3D_BIG_DROP;
-						else if(z < -180.0)
-							new_val = TOF3D_SMALL_DROP;
-						else if((d < 600.0 && z < 80.0) || z < 120.0)
-							new_val = TOF3D_FLOOR;
-						else if((d < 600.0 && z < 110.0) || z < 150.0)
-							new_val = TOF3D_THRESHOLD;
-						else if(z < 265.0)
-							new_val = TOF3D_SMALL_ITEM;
-						else if(z < 295.0)
-							new_val = TOF3D_WALL;
-						else if(z < 1500.0)
-							new_val = TOF3D_BIG_ITEM;
-						else if(z < 2050.0)
-							new_val = TOF3D_LOW_CEILING;
-
-						if(new_val > tof3ds[tof3d_wr].objmap[yspot*TOF3D_HMAP_XSPOTS+xspot])
-							tof3ds[tof3d_wr].objmap[yspot*TOF3D_HMAP_XSPOTS+xspot] = new_val;
 					}
 
 				}
@@ -477,18 +418,6 @@ static void process_pulutof_frame(pulutof_frame_t *in);
 
 void* pulutof_processing_thread()
 {
-	printf("tof3d: opening tof_zcalib.raw Z axis calibration file for read.\n");
-	FILE* floor = fopen("/home/hrst/rn1-host/tof_zcalib.raw", "r");
-	if(!floor)
-	{
-		printf("WARNING: Couldn't open tof_zcalib.raw for read. Floor calibration is disabled.\n");
-	}
-	else
-	{
-		fread(hmap_calib, 2, TOF3D_HMAP_XSPOTS*TOF3D_HMAP_YSPOTS, floor);
-		fclose(floor);
-	}
-
 	while(running)
 	{
 		pulutof_frame_t* p_tof;
@@ -506,7 +435,6 @@ void* pulutof_processing_thread()
 	return NULL;
 
 }
-static void process_objmap();
 
 static void process_pulutof_frame(pulutof_frame_t *in)
 {
