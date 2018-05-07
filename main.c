@@ -137,7 +137,7 @@ void* main_thread()
 			}
 			if(cmd >= '0' && cmd <= '3')
 			{
-				pulutof_cal_offset(cmd);
+				pulutof_cal_offset(cmd-'0');
 			}
 			if(cmd == 'v')
 			{
