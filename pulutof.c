@@ -468,8 +468,6 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 		distances_to_objmap(in);
 
 
-		printf("sidx = %d\n", sidx);
-
 		if(sidx == 2)
 		{
 			tof3ds[tof3d_wr].robot_pos = in->robot_pos;
