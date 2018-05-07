@@ -443,6 +443,8 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 
 	int sidx = in->sensor_idx;
 
+			printf("sidx = %d\n", sidx);
+
 	if(sidx > NUM_PULUTOFS-1)
 	{
 		printf("WARNING:process_pulutof_frame: illegal sensor idx coming from hw.\n");
@@ -476,7 +478,6 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 		{
 			distances_to_objmap(in);
 
-			printf("sidx = %d\n", sidx);
 
 
 			if(sidx == 2)

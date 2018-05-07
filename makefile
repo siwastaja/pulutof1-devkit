@@ -10,7 +10,7 @@ all: main
 	gcc -c -o $@ $< $(CFLAGS) -pthread
 
 main: $(OBJ)
-	gcc $(LDFLAGS) -o rn1host $^ -lm -pthread
+	gcc $(LDFLAGS) -o main $^ -lm -pthread
 
 e:
 	gedit --new-window main.c pulutof.h pulutof.c tcp_comm.c tcp_comm.h tcp_parser.c tcp_parser.h &
