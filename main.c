@@ -139,6 +139,10 @@ void* main_thread()
 			{
 				pulutof_cal_offset(cmd);
 			}
+			if(cmd == 'v')
+			{
+				verbose_mode = verbose_mode?0:1;
+			}
 			if(cmd == 'p')
 			{
 				if(send_pointcloud == 0)
