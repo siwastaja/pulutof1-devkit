@@ -411,9 +411,6 @@ static void distances_to_objmap(pulutof_frame_t *in)
 	}
 }
 
-static int calibrating = 0;
-static int calib_sensor_idx = 0;
-
 static void process_pulutof_frame(pulutof_frame_t *in);
 
 void* pulutof_processing_thread()
