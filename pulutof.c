@@ -356,12 +356,12 @@ static void distances_to_objmap(pulutof_frame_t *in)
 
 						case 3: // direction in which the original geometrical calibration was calculated in
 						hor_ang = -1*x_angs[py*TOF_XS+px];
-						ver_ang = y_angs[py*TOF_XS+px];
+						ver_ang = -1*y_angs[py*TOF_XS+px];
 						break;
 
 						case 4: // Same as 3, but upside down
 						hor_ang = x_angs[py*TOF_XS+px];
-						ver_ang = -1*y_angs[py*TOF_XS+px];
+						ver_ang = y_angs[py*TOF_XS+px];
 						break;
 
 						default: printf("ERROR: illegal mount_mode in sensor mount table.\n"); return;
