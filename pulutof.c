@@ -762,7 +762,7 @@ void pulutof_cal_offset(uint8_t idx)
 {
 	printf("Requesting offset calib\n");
 	struct spi_ioc_transfer xfer;
-	struct cmd { uint32_t header; uint8_t sensor_idx;} cmd;
+	struct __attribute__((packed)) cmd { uint32_t header; uint8_t sensor_idx;} cmd;
 
 	cmd.header = 0xca0ff5e7;
 	cmd.sensor_idx = idx;

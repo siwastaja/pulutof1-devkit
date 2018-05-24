@@ -200,7 +200,7 @@ int main(int argc, char** argv)
 			return -1;
 		}
 
-		size += size%4;
+		size += 4 - size%4;
 
 		uint8_t chk = CRC_INITIAL_REMAINDER;
 
