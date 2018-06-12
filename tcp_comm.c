@@ -115,7 +115,7 @@ int handle_tcp_listener()
 	}
 
 	tcp_client_sock = new_fd;
-	printf("INFO: connection accepted, client %08x, port %u.\n", clientname.sin_addr.s_addr,
+	fprintf(stderr, "INFO: connection accepted, client %08x, port %u.\n", clientname.sin_addr.s_addr,
 	        ntohs(clientname.sin_port));
 
 
@@ -128,7 +128,7 @@ int handle_tcp_client()
 	int ret = tcp_parser(tcp_client_sock);
 	if(ret == -10 || ret == -11)
 	{
-		printf("Info: closing TCP connection.\n");
+		fprintf(stderr,"Info: closing TCP connection.\n");
 		close(tcp_client_sock);
 		tcp_client_sock = -1;
 	}
@@ -156,7 +156,7 @@ int tcp_send(uint8_t* buf, int len)
 		}
 //		else if(ret == 0)
 //		{
-//			printf("INFO: tcp_send(): write() returned 0, closing TCP connection.\n");
+//			fprintf(stderr, "INFO: tcp_send(): write() returned 0, closing TCP connection.\n");
 //			tcp_comm_close();
 //			return -2;
 //		}
@@ -165,7 +165,7 @@ int tcp_send(uint8_t* buf, int len)
 		p_buf += ret;
 		if(len)
 		{
-			printf("INFO: tcp_send(): write() didn't write everything, written=%d, left=%d\n", ret, len);
+			fprintf(stderr,"INFO: tcp_send(): write() didn't write everything, written=%d, left=%d\n", ret, len);
 			usleep(200);
 			timeout--;
 

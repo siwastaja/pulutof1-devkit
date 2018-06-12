@@ -43,7 +43,7 @@
 
 volatile int verbose_mode = 0;
 volatile int send_raw_tof = -1;
-volatile int send_pointcloud = 0; // 0 = off, 1 = relative to robot, 2 = relative to actual world coords
+volatile int send_pointcloud = 0; // 0 = off, -1 = relative to origin to stdout, 1 = relative to robot to files, 2 = relative to actual world coords to files
 
 double subsec_timestamp()
 {
@@ -59,11 +59,11 @@ void save_pointcloud(int n_points, xyz_t* cloud)
 	static int pc_cnt = 0;
 	char fname[256];
 	snprintf(fname, 255, "cloud%05d.xyz", pc_cnt);
-	printf("Saving pointcloud with %d samples to file %s.\n", n_points, fname);
+	fprintf(stderr, "Saving pointcloud with %d samples to file %s.\n", n_points, fname);
 	FILE* pc_csv = fopen(fname, "w");
 	if(!pc_csv)
 	{
-		printf("Error opening file for write.\n");
+	   fprintf(stderr, "Error opening file for write.\n");
 	}
 	else
 	{
@@ -78,6 +78,14 @@ void save_pointcloud(int n_points, xyz_t* cloud)
 	if(pc_cnt > 99999) pc_cnt = 0;
 }
 
+
+void print_pointcloud(int n_points, xyz_t* cloud)
+{
+   for (int i = 0; i < n_points; i++) {
+      printf("%d %d %d\n",cloud[i].x, -1*cloud[i].y, cloud[i].z);
+   } // for
+   
+} // print_pointcloud
 
 
 void request_tof_quit(void);
@@ -120,6 +128,7 @@ void* main_thread()
 		if(FD_ISSET(STDIN_FILENO, &fds))
 		{
 			int cmd = fgetc(stdin);
+		   
 			if(cmd == 'q')
 			{
 				retval = 0;
@@ -128,12 +137,12 @@ void* main_thread()
 			if(cmd == 'z')
 			{
 				if(send_raw_tof >= 0) send_raw_tof--;
-				printf("Sending raw tof from sensor %d\n", send_raw_tof);
+				fprintf(stderr, "INFO: Sending raw tof from sensor %d\n", send_raw_tof);
 			}
 			if(cmd == 'x')
 			{
 				if(send_raw_tof < 3) send_raw_tof++;
-				printf("Sending raw tof from sensor %d\n", send_raw_tof);
+				fprintf(stderr, "INFO: Sending raw tof from sensor %d\n", send_raw_tof);
 			}
 			if(cmd >= '0' && cmd <= '3')
 			{
@@ -145,23 +154,18 @@ void* main_thread()
 			}
 			if(cmd == 'p')
 			{
-				if(send_pointcloud == 0)
-				{
-					printf("INFO: Will send pointclouds relative to robot origin\n");
-					send_pointcloud = 1;
-				}
-				else if(send_pointcloud == 1)
-				{
-					printf("INFO: Will send pointclouds relative to world origin\n");
-					send_pointcloud = 2;
-				}
-				else
-				{
-					printf("INFO: Will stop sending pointclouds\n");
-					send_pointcloud = 0;
-				}
-			}
-		}
+				if (send_pointcloud == 0) {
+				   fprintf(stderr, "INFO: Will send pointclouds relative to robot origin\n");
+				   send_pointcloud = 1;
+				} else if (send_pointcloud == 1) {
+				   fprintf(stderr, "INFO: Will send pointclouds relative to world origin\n");
+				   send_pointcloud = 2;
+				} else {
+				   fprintf(stderr, "INFO: Will stop sending pointclouds\n");
+				   send_pointcloud = 0;
+				} // if-else
+			} // if
+		} // if
 
 
 
@@ -178,7 +182,7 @@ void* main_thread()
 				}
 				else
 				{
-					printf("WARN: Illegal maintenance message magic number 0x%08x.\n", msg_cr_maintenance.magic);
+				        fprintf(stderr, "WARN: Illegal maintenance message magic number 0x%08x.\n", msg_cr_maintenance.magic);
 				}
 			}		
 		}
@@ -190,10 +194,14 @@ void* main_thread()
 
 
 		tof3d_scan_t *p_tof;
+		
 		if( (p_tof = get_tof3d()) )
 		{
-			if(send_pointcloud)
-				save_pointcloud(p_tof->n_points, p_tof->cloud);
+		   	if (send_pointcloud > 0) {
+			   save_pointcloud(p_tof->n_points, p_tof->cloud);
+			} else if (send_pointcloud < 0) {
+			   print_pointcloud(p_tof->n_points, p_tof->cloud);
+			} // if else
 
 			if(tcp_client_sock >= 0)
 			{
@@ -220,24 +228,37 @@ int main(int argc, char** argv)
 {
 	pthread_t thread_main, thread_tof, thread_tof2;
 
-	int ret;
+	int ret, opt;
 
-	if( (ret = pthread_create(&thread_main, NULL, main_thread, NULL)) )
-	{
-		printf("ERROR: main thread creation, ret = %d\n", ret);
-		return -1;
+	while ((opt = getopt(argc, argv, "p?")) != -1) {
+	   switch (opt) {
+	   case 'p':  
+	      send_pointcloud = -1;
+	      break;
+	   default: /* '?' */
+	      fprintf(stderr,
+		      "Usage: %s [-p]\n"
+		      "Options:\n -p\t\t A continuous pointcloud output to stdout\n\n"
+		      "Exits with q\n\n",
+		      argv[0]);
+	      exit(EXIT_FAILURE);
+	   }
+	}
+       
+	if ( (ret = pthread_create(&thread_main, NULL, main_thread, NULL)) ) {	   
+	   fprintf(stderr, "ERROR: main thread creation, ret = %d\n", ret);
+	   return EXIT_FAILURE;
 	}
 
-	if( (ret = pthread_create(&thread_tof, NULL, pulutof_poll_thread, NULL)) )
-	{
-		printf("ERROR: tof3d access thread creation, ret = %d\n", ret);
-		return -1;
+	if ( (ret = pthread_create(&thread_tof, NULL, pulutof_poll_thread, NULL)) ) {
+	   fprintf(stderr, "ERROR: tof3d access thread creation, ret = %d\n", ret);
+	   return EXIT_FAILURE;
 	}
 
 	#ifndef PULUTOF1_GIVE_RAWS
-		if( (ret = pthread_create(&thread_tof2, NULL, pulutof_processing_thread, NULL)) )
+		if ( (ret = pthread_create(&thread_tof2, NULL, pulutof_processing_thread, NULL)) )
 		{
-			printf("ERROR: tof3d processing thread creation, ret = %d\n", ret);
+			fprintf(stderr, "ERROR: tof3d processing thread creation, ret = %d\n", ret);
 			return -1;
 		}
 	#endif

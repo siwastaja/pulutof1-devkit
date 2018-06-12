@@ -66,7 +66,7 @@ static int init_spi()
 
 	if(spi_fd < 0)
 	{
-		printf("ERROR: Opening PULUTOF SPI device %s failed: %d (%s).\n", PULUTOF_SPI_DEVICE, errno, strerror(errno));
+		fprintf(stderr,"ERROR: Opening PULUTOF SPI device %s failed: %d (%s).\n", PULUTOF_SPI_DEVICE, errno, strerror(errno));
 		return -1;
 	}
 
@@ -89,19 +89,19 @@ static int init_spi()
 
 	if(ioctl(spi_fd, SPI_IOC_WR_MODE, &spi_mode) < 0)
 	{
-		printf("ERROR: Opening PULUTOF SPI devide: ioctl SPI_IOC_WR_MODE failed: %d (%s).\n", errno, strerror(errno));
+		fprintf(stderr, "ERROR: Opening PULUTOF SPI devide: ioctl SPI_IOC_WR_MODE failed: %d (%s).\n", errno, strerror(errno));
 		return -2;
 	}
 
 	if(ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &spi_bits_per_word) < 0)
 	{
-		printf("ERROR: Opening PULUTOF SPI devide: ioctl SPI_IOC_WR_BITS_PER_WORD failed: %d (%s).\n", errno, strerror(errno));
+		fprintf(stderr, "ERROR: Opening PULUTOF SPI devide: ioctl SPI_IOC_WR_BITS_PER_WORD failed: %d (%s).\n", errno, strerror(errno));
 		return -2;
 	}
 
 	if(ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed) < 0)
 	{
-		printf("ERROR: Opening PULUTOF SPI devide: ioctl SPI_IOC_WR_MAX_SPEED_HZ failed: %d (%s).\n", errno, strerror(errno));
+		fprintf(stderr, "ERROR: Opening PULUTOF SPI devide: ioctl SPI_IOC_WR_MAX_SPEED_HZ failed: %d (%s).\n", errno, strerror(errno));
 		return -2;
 	}
 
@@ -113,7 +113,7 @@ static int deinit_spi()
 {
 	if(close(spi_fd) < 0)
 	{
-		printf("WARNING: Closing PULUTOF SPI devide failed: %d (%s).\n", errno, strerror(errno));
+		fprintf(stderr, "WARNING: Closing PULUTOF SPI devide failed: %d (%s).\n", errno, strerror(errno));
 		return -1;
 	}
 
@@ -125,13 +125,13 @@ volatile int dbg_id = 0;
 void pulutof_decr_dbg()
 {
 	if(dbg_id) dbg_id--;
-	printf("PULUTOF dbg_id=%d\n", dbg_id);
+	fprintf(stderr, "PULUTOF dbg_id=%d\n", dbg_id);
 }
 
 void pulutof_incr_dbg()
 {
 	dbg_id++;
-	printf("PULUTOF dbg_id=%d\n", dbg_id);
+	fprintf(stderr, "PULUTOF dbg_id=%d\n", dbg_id);
 }
 
 #define PULUTOF_RINGBUF_LEN 16
@@ -269,7 +269,7 @@ static void distances_to_objmap(pulutof_frame_t *in)
 	int sidx = in->sensor_idx;
 	if(sidx > NUM_PULUTOFS-1)
 	{
-		printf("WARNING: distances_to_objmap: illegal sensor idx coming from hw.\n");
+		fprintf(stderr, "WARNING: distances_to_objmap: illegal sensor idx coming from hw.\n");
 		return;
 	}
 
@@ -291,7 +291,7 @@ static void distances_to_objmap(pulutof_frame_t *in)
 	float sensor_yang = sensor_mounts[sidx].vert_ang_rel_ground;
 	float sensor_z = sensor_mounts[sidx].z_rel_ground;
 	
-	int do_send_pointcloud = send_pointcloud;
+	int do_send_pointcloud = abs(send_pointcloud);
 
 
 	for(int pyy = 1; pyy < TOF_YS-1; pyy++)
@@ -364,7 +364,7 @@ static void distances_to_objmap(pulutof_frame_t *in)
 						ver_ang = y_angs[py*TOF_XS+px];
 						break;
 
-						default: printf("ERROR: illegal mount_mode in sensor mount table.\n"); return;
+						default: fprintf(stderr, "ERROR: illegal mount_mode in sensor mount table.\n"); return;
 					}
 
 					// From spherical to cartesian coordinates
@@ -376,7 +376,7 @@ static void distances_to_objmap(pulutof_frame_t *in)
 					float z = d * sin(ver_ang + sensor_yang) + sensor_z;
 
 
-					//printf("DIST = %.0f  x=%.0f  y=%.0f  z=%.0f  xspot=%d  yspot=%d  ver_ang=%.2f  sensor_yang=%.2f  hor_ang=%.2f  sensor_ang=%.2f\n", d, x, y, z, xspot, yspot, ver_ang, sensor_yang, hor_ang, sensor_ang); 
+					//fprintf(stderr, "DIST = %.0f  x=%.0f  y=%.0f  z=%.0f  xspot=%d  yspot=%d  ver_ang=%.2f  sensor_yang=%.2f  hor_ang=%.2f  sensor_ang=%.2f\n", d, x, y, z, xspot, yspot, ver_ang, sensor_yang, hor_ang, sensor_ang); 
 
 					if(do_send_pointcloud == 1) // relative to robot
 					{
@@ -442,7 +442,7 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 
 	if(sidx > NUM_PULUTOFS-1)
 	{
-		printf("WARNING:process_pulutof_frame: illegal sensor idx coming from hw.\n");
+		fprintf(stderr, "WARNING:process_pulutof_frame: illegal sensor idx coming from hw.\n");
 		return;
 	}
 
@@ -450,7 +450,7 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 
 	if(running_ok && expected_sidx != sidx)
 	{
-		printf("WARNING:process_pulutof_frame: unexpected sensor idx %d, previous was %d, was expecting %d. Ignoring until 0\n", sidx, prev_sidx, expected_sidx);
+		fprintf(stderr, "WARNING:process_pulutof_frame: unexpected sensor idx %d, previous was %d, was expecting %d. Ignoring until 0\n", sidx, prev_sidx, expected_sidx);
 		running_ok = 0;
 	}
 
@@ -496,18 +496,18 @@ static void print_table()
 	{
 		for(int xx=150; xx < 160; xx++)
 		{
-			printf("(%5.1f, %5.1f) ", x_angs[yy*TOF_XS+xx], y_angs[yy*TOF_XS+xx]);
+			fprintf(stderr, "(%5.1f, %5.1f) ", x_angs[yy*TOF_XS+xx], y_angs[yy*TOF_XS+xx]);
 		}
-		printf("\n");
+		fprintf(stderr, "\n");
 	}
 
-	printf("\n");
-	printf("\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\n");
 }
 
 static void outp_ang(int px, int py, float ax, float ay)
 {
-//	printf("(%3d, %3d)=(%5.1f, %5.1f)\n", px, py, ax, ay);
+//	fprintf(stderr, "(%3d, %3d)=(%5.1f, %5.1f)\n", px, py, ax, ay);
 
 	if(py < 0 || py > TOF_YS-1 || px < 0 || px > TOF_XS-1)
 		return;
@@ -692,16 +692,16 @@ static int poll_availability()
 
 	if(ioctl(spi_fd, SPI_IOC_MESSAGE(1), &xfer) < 0)
 	{
-		printf("ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
+		fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
 		return -1;
 	}
 
 	if(response.header != 0x11223344 || response.status == 0)
 	{
-		printf("ERROR: Illegal response in poll_availability: header=0x%08x  status=%d\n", response.header, response.status);
+		fprintf(stderr, "ERROR: Illegal response in poll_availability: header=0x%08x  status=%d\n", response.header, response.status);
 		return -1;
 	}
-	//printf("status=%d\n", response.status);
+	//fprintf(stderr, "status=%d\n", response.status);
 	return response.status;
 }
 
@@ -719,31 +719,31 @@ static int read_frame()
 
 	if(ioctl(spi_fd, SPI_IOC_MESSAGE(1), &xfer) < 0)
 	{
-		printf("ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
+		fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
 		return -1;
 	}
 
 	if(verbose_mode)
 	{
-		printf("Frame (sensor_idx= %d) read ok, pose=(%d,%d,%d). Timing data:\n", pulutof_ringbuf[pulutof_ringbuf_wr].sensor_idx, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.x, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.y, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.ang);
+		fprintf(stderr, "Frame (sensor_idx= %d) read ok, pose=(%d,%d,%d). Timing data:\n", pulutof_ringbuf[pulutof_ringbuf_wr].sensor_idx, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.x, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.y, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.ang);
 		for(int i=0; i<24; i++)
 		{
-			printf("%d:%.1f ", i, (float)pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i]/10.0);
+			fprintf(stderr, "%d:%.1f ", i, (float)pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i]/10.0);
 		}
-		printf("\n");
-		printf("Time deltas to:\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Time deltas to:\n");
 		for(int i=1; i<24; i++)
 		{
-			printf(">%d:%.1f ", i, (float)(pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i]-pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i-1])/10.0);
+			fprintf(stderr, ">%d:%.1f ", i, (float)(pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i]-pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i-1])/10.0);
 		}
-		printf("\n");
-		printf("dbg_i32:\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "dbg_i32:\n");
 		for(int i=0; i<8; i++)
 		{
-			printf("[%d] %11d  ", i, pulutof_ringbuf[pulutof_ringbuf_wr].dbg_i32[i]);
+			fprintf(stderr, "[%d] %11d  ", i, pulutof_ringbuf[pulutof_ringbuf_wr].dbg_i32[i]);
 		}
-		printf("\n");
-		printf("\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "\n");
 	}
 
 	int ret = pulutof_ringbuf[pulutof_ringbuf_wr].status;
@@ -760,7 +760,7 @@ void request_tof_quit()
 
 void pulutof_cal_offset(uint8_t idx)
 {
-	printf("Requesting offset calib\n");
+	fprintf(stderr, "Requesting offset calib\n");
 	struct spi_ioc_transfer xfer;
 	struct __attribute__((packed)) cmd { uint32_t header; uint8_t sensor_idx;} cmd;
 
@@ -775,7 +775,7 @@ void pulutof_cal_offset(uint8_t idx)
 
 	if(ioctl(spi_fd, SPI_IOC_MESSAGE(1), &xfer) < 0)
 	{
-		printf("ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
+		fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
 		return;
 	}
 
@@ -791,7 +791,7 @@ void* pulutof_poll_thread()
 		int next = pulutof_ringbuf_wr+1; if(next >= PULUTOF_RINGBUF_LEN) next = 0;
 		if(next == pulutof_ringbuf_rd)
 		{
-			printf("WARNING: PULUTOF ringbuf overflow prevented, ignoring images...\n");
+			fprintf(stderr, "WARNING: PULUTOF ringbuf overflow prevented, ignoring images...\n");
 			usleep(250000);
 			continue;
 		}
@@ -802,7 +802,7 @@ void* pulutof_poll_thread()
 		if(avail < 0)
 		{
 #ifdef SPI_PRINT_DBG
-		//	printf("Sleeping 2 s\n");
+		//	fprintf(stderr, "Sleeping 2 s\n");
 #endif
 			sleep(2);
 			continue;
@@ -811,7 +811,7 @@ void* pulutof_poll_thread()
 		if(avail < 250)
 		{
 #ifdef SPI_PRINT_DBG
-		//	printf("Sleeping %d ms\n", avail);
+		//	fprintf(stderr, "Sleeping %d ms\n", avail);
 #endif
 			usleep(1000*avail);
 			continue;

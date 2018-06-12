@@ -53,7 +53,7 @@ void tcp_send_picture(int16_t id, uint8_t bytes_per_pixel, int xs, int ys, uint8
 {
 	if(xs < 1 || ys < 1 || xs > 10000 || ys > 10000 || bytes_per_pixel < 1 || bytes_per_pixel > 4 )
 	{
-		printf("ERROR: tcp_send_picture: invalid params\n.");
+		fprintf(stderr, "ERROR: tcp_send_picture: invalid params\n.");
 		return;
 	}
 
@@ -62,7 +62,7 @@ void tcp_send_picture(int16_t id, uint8_t bytes_per_pixel, int xs, int ys, uint8
 
 	if(!buf)
 	{
-		printf("ERROR: Out of memory in tcp_send_picture\n");
+		fprintf(stderr, "ERROR: Out of memory in tcp_send_picture\n");
 		return;
 	}
 
@@ -147,7 +147,7 @@ int tcp_send_msg(tcp_message_t* msg_type, void* msg)
 
 	PARSE_END: ;
 
-	//printf("Sending tcp, size=%d\n", msg_type->size+3);
+	//fprintf(stderr, "Sending tcp, size=%d\n", msg_type->size+3);
 	tcp_send(sendbuf, msg_type->size+3);
 
 	return 0;
