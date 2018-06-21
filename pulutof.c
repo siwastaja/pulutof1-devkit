@@ -758,6 +758,8 @@ void request_tof_quit()
 	running = 0;
 }
 
+static int calibrating_offset = 0;
+
 void pulutof_cal_offset(uint8_t idx)
 {
 	fprintf(stderr, "Requesting offset calib\n");
@@ -778,7 +780,7 @@ void pulutof_cal_offset(uint8_t idx)
 		fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
 		return;
 	}
-
+	calibrating_offset = 1;
 }
 
 
@@ -796,6 +798,12 @@ void* pulutof_poll_thread()
 			continue;
 		}
 
+
+		if(calibrating_offset)
+		{
+			sleep(5);
+			calibrating_offset = 0;
+		}
 
 		int avail = poll_availability();
 
@@ -815,6 +823,12 @@ void* pulutof_poll_thread()
 #endif
 			usleep(1000*avail);
 			continue;
+		}
+
+		if(calibrating_offset)
+		{
+			sleep(5);
+			calibrating_offset = 0;
 		}
 
 		read_frame();
