@@ -40,12 +40,20 @@ typedef struct __attribute__((packed))
 	int32_t z;
 } xyz_t;
 
+enum pulutof_status {
+   PULUTOF_STATUS_CONFIGURATE = 252,
+   PULUTOF_STATUS_OVERFLOW    = 253,
+   PULUTOF_STATUS_MULTIPLE    = 254,
+   PULUTOF_STATUS_AVAILABLE   = 255
+   // 0..250: suggested sleep interval in 1ms units.
+};
 
-#define PULUTOF_STATUS_OVERFLOW  253
-#define PULUTOF_STATUS_MULTIPLE  254
-#define PULUTOF_STATUS_AVAILABLE 255
-// 0..250: suggested sleep interval in 1ms units.
-
+enum pulutof_commands {
+   PULUTOF_COMMAND_CALIBRATE_OFFSET = 0xca0ff5e7,
+   PULUTOF_COMMAND_MIDLIER_FILTER   = 0x00000001,
+   PULUTOF_COMMAND_EXPOSURE         = 0x00000002,
+   PULUTOF_COMMAND_HDR_MULTIPLIER   = 0x00000003
+};
 
 #define TOF_XS 160
 #define TOF_YS 60
@@ -79,6 +87,12 @@ typedef struct __attribute__((packed))
 
 } pulutof_frame_t;
 
+typedef struct __attribute__((packed)) pulutof_command {
+   uint32_t header;
+   uint32_t parameter;
+} pulutof_command_frame_t;
+
+void pulutof_command(enum pulutof_commands command_number, int parameter);
 void request_tof_quit();
 void* pulutof_poll_thread();
 void* pulutof_processing_thread();

@@ -46,6 +46,7 @@
 #include <linux/spi/spidev.h>
 #include <unistd.h>
 #include <math.h>
+#include <stdbool.h>
 
 #include "pulutof.h"
 
@@ -54,11 +55,16 @@
 extern volatile int verbose_mode;
 
 static int spi_fd;
-static volatile int running = 1;
+static volatile bool running     = true;
+static volatile bool configurate = false;
 
 static const unsigned char spi_mode = SPI_MODE_0;
 static const unsigned char spi_bits_per_word = 8;
 static const unsigned int spi_speed = 32000000; // Hz
+
+static pthread_mutex_t mutex_poll_availabity = PTHREAD_MUTEX_INITIALIZER;
+
+
 
 static int init_spi()
 {
@@ -279,7 +285,7 @@ static void distances_to_objmap(pulutof_frame_t *in)
 	float robot_ang = ANG32TORAD(in->robot_pos.ang);
 	float robot_x = in->robot_pos.x;
 	float robot_y = in->robot_pos.y;
-
+previous
 	float sensor_ang = robot_ang + sensor_mounts[sidx].ang_rel_robot;
 	float sensor_x = robot_x + cos(robot_ang)*sensor_mounts[sidx].x_rel_robot;
 	float sensor_y = robot_y + sin(robot_ang)*sensor_mounts[sidx].y_rel_robot;
@@ -413,30 +419,35 @@ static void distances_to_objmap(pulutof_frame_t *in)
 
 static void process_pulutof_frame(pulutof_frame_t *in);
 
+static volatile int prev_sidx = -1;
+
 void* pulutof_processing_thread()
 {
-	while(running)
-	{
-		pulutof_frame_t* p_tof;
-		if( (p_tof = get_pulutof_frame()) )
-		{
-			process_pulutof_frame(p_tof);
-		}
-		else
-		{
-			usleep(5000);
-		}
+   while (running) {
+	   
+      pulutof_frame_t* p_tof;
 
-	}
+      if (p_tof = get_pulutof_frame()) {
+	 process_pulutof_frame(p_tof);
+      } else {	 
+	 usleep(5000);
+      } // if-else
 
-	return NULL;
+      if (configurate) {                               // start from the begin after configurate
+	 pulutof_ringbuf_wr = pulutof_ringbuf_rd = 0;
+	 prev_sidx = -1;
+      } // if
 
-}
+   } // while
+
+   return NULL;
+
+} // pulutof_processing_thread
+
 
 static void process_pulutof_frame(pulutof_frame_t *in)
 {
 	static int running_ok = 0;
-	static int prev_sidx = -1;
 
 	int sidx = in->sensor_idx;
 
@@ -494,8 +505,9 @@ static void print_table()
 {
 	for(int yy = 0; yy < TOF_YS; yy++)
 	{
-		for(int xx=150; xx < 160; xx++)
-		{
+//	   for(int xx=150; xx < 160; xx++)
+	   for(int xx=0; xx < TOF_XS; xx++)
+	   {
 			fprintf(stderr, "(%5.1f, %5.1f) ", x_angs[yy*TOF_XS+xx], y_angs[yy*TOF_XS+xx]);
 		}
 		fprintf(stderr, "\n");
@@ -648,13 +660,14 @@ static void gen_ang_tables()
 	{
 		for(int pxx=0; pxx < TOF_XS/2; pxx++)
 		{
-			int out_pxx = TOF_XS-pxx-0;
+// Bug (index over bondary):			int out_pxx = TOF_XS-pxx-0;
+		   	int out_pxx = TOF_XS-pxx-1;
 			x_angs[pyy*TOF_XS+out_pxx] = -1*x_angs[pyy*TOF_XS+pxx];
 			y_angs[pyy*TOF_XS+out_pxx] = y_angs[pyy*TOF_XS+pxx];	
 		}
 	}
 
-	//print_table();
+//	print_table();
 
 }
 
@@ -675,7 +688,7 @@ static void gen_ang_tables()
 */
 
 
-static uint8_t txbuf[65536];
+static uint8_t txbuf[65536]; 
 
 static int poll_availability()
 {
@@ -689,7 +702,7 @@ static int poll_availability()
 	xfer.rx_buf = &response;
 	xfer.len = sizeof response;
 	xfer.cs_change = 0; // deassert chip select after the transfer
-
+ 
 	if(ioctl(spi_fd, SPI_IOC_MESSAGE(1), &xfer) < 0)
 	{
 		fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
@@ -725,7 +738,9 @@ static int read_frame()
 
 	if(verbose_mode)
 	{
-		fprintf(stderr, "Frame (sensor_idx= %d) read ok, pose=(%d,%d,%d). Timing data:\n", pulutof_ringbuf[pulutof_ringbuf_wr].sensor_idx, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.x, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.y, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.ang);
+		fprintf(stderr, "Frame (sensor_idx= %d) read ok, pose=(%d,%d,%d). Timing data:\n",
+			pulutof_ringbuf[pulutof_ringbuf_wr].sensor_idx, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.x,
+			pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.y, pulutof_ringbuf[pulutof_ringbuf_wr].robot_pos.ang);
 		for(int i=0; i<24; i++)
 		{
 			fprintf(stderr, "%d:%.1f ", i, (float)pulutof_ringbuf[pulutof_ringbuf_wr].timestamps[i]/10.0);
@@ -758,48 +773,68 @@ void request_tof_quit()
 	running = 0;
 }
 
-void pulutof_cal_offset(uint8_t idx)
+
+void pulutof_command(enum pulutof_commands command_number, int parameter)
 {
-	fprintf(stderr, "Requesting offset calib\n");
-	struct spi_ioc_transfer xfer;
-	struct __attribute__((packed)) cmd { uint32_t header; uint8_t sensor_idx;} cmd;
+   struct spi_ioc_transfer xfer;
+   pulutof_command_frame_t cmd;
 
-	cmd.header = 0xca0ff5e7;
-	cmd.sensor_idx = idx;
+   cmd.header    = command_number;
+   cmd.parameter = (uint32_t) parameter;
 
-	memset(&xfer, 0, sizeof(xfer)); // unused fields need to be initialized zero.
-	xfer.tx_buf = &cmd;
-	xfer.rx_buf = NULL;
-	xfer.len = sizeof cmd;
-	xfer.cs_change = 0; // deassert chip select after the transfer
+   memset(&xfer, 0, sizeof(xfer)); // unused fields need to be initialized zero.
+   xfer.tx_buf = &cmd;
+   xfer.rx_buf = NULL;
+   xfer.len = sizeof cmd;
+   xfer.cs_change = 0;              // deassert chip select after the transfer
 
-	if(ioctl(spi_fd, SPI_IOC_MESSAGE(1), &xfer) < 0)
-	{
-		fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
-		return;
-	}
+   pthread_mutex_lock(&mutex_poll_availabity);
+   
+   if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &xfer) < 0) {	   
 
-}
+      fprintf(stderr, "ERROR: spi ioctl transfer operation failed: %d (%s)\n", errno, strerror(errno));
+
+   } else {
+
+      configurate = true;
+               
+      if (command_number == PULUTOF_COMMAND_CALIBRATE_OFFSET) {
+	 sleep(3);                                               // sleep enough flashing done to be able poll PuluToF
+      } else {
+	 sleep(1);                                               // sleep enough to be able poll PuluToF (no flashing)
+      } // if-else
+	   
+      while (poll_availability() == PULUTOF_STATUS_CONFIGURATE)
+	 ; 
+
+      configurate = false;
+
+   } // if-else
+
+   pthread_mutex_unlock(&mutex_poll_availabity);
+	 
+} // pulutof_command
 
 
 void* pulutof_poll_thread()
 {
 	gen_ang_tables();
 	init_spi();
-	while(running)
+	while (running)
 	{
 		int next = pulutof_ringbuf_wr+1; if(next >= PULUTOF_RINGBUF_LEN) next = 0;
-		if(next == pulutof_ringbuf_rd)
+		if (next == pulutof_ringbuf_rd)
 		{
 			fprintf(stderr, "WARNING: PULUTOF ringbuf overflow prevented, ignoring images...\n");
 			usleep(250000);
 			continue;
 		}
 
-
+		pthread_mutex_lock(&mutex_poll_availabity);
 		int avail = poll_availability();
+		pthread_mutex_unlock(&mutex_poll_availabity);
 
-		if(avail < 0)
+		if (avail < 0)
 		{
 #ifdef SPI_PRINT_DBG
 		//	fprintf(stderr, "Sleeping 2 s\n");
