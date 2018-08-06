@@ -25,6 +25,7 @@
 #ifndef PULUTOF_H
 #define PULUTOF_H
 
+#define ANG32TORAD(x) ( ((float)((uint32_t)(x)))/683565275.576432)
 
 typedef struct __attribute__((packed))
 {
@@ -103,6 +104,43 @@ void pulutof_decr_dbg();
 void pulutof_incr_dbg();
 void pulutof_cal_offset(uint8_t idx);
 
+/*
+	objmap: 2.5D object/obstacle map (similar to what was formerly called "hmap" when we still used DepthSense, in tof3d.cpp, now deprecated)
+
+	----> +x
+	|
+	|
+	v +y
+
+
+        ################
+	################
+        ############O###           Robot origin at OBSTMAP_X_MID, OBSTMAP_Y_MID
+	################
+	################
+
+*/
+
+// Priority order: bigger number overrides smaller at same 2D spot
+#define TOF3D_WALL           8 
+#define TOF3D_BIG_ITEM       7 
+#define TOF3D_LOW_CEILING    6 
+#define TOF3D_BIG_DROP       5
+#define TOF3D_SMALL_ITEM     4 
+#define TOF3D_SMALL_DROP     3
+#define TOF3D_THRESHOLD      2   
+#define TOF3D_FLOOR          1
+#define TOF3D_UNSEEN         0
+
+#define TOF3D_HMAP_SPOT_SIZE 40
+
+
+#define TOF3D_HMAP_YSPOTS 200
+#define TOF3D_HMAP_YMIDDLE 100
+#define TOF3D_HMAP_XSPOTS 200
+#define TOF3D_HMAP_XMIDDLE 100
+
+#define HMAP_BLOCK_MM 40
 
 extern volatile int send_raw_tof; // which sensor id to send as raw_depth, <0 = N/A
 extern volatile int send_pointcloud; // 0 = off, 1 = relative to robot, 2 = relative to actual world coords
@@ -110,6 +148,7 @@ extern volatile int send_pointcloud; // 0 = off, 1 = relative to robot, 2 = rela
 typedef struct
 {
 	pos_t robot_pos;
+	int8_t objmap[TOF3D_HMAP_YSPOTS*TOF3D_HMAP_XSPOTS];
 	uint16_t raw_depth[160*60]; // for development purposes: populated only when enabled, with only 1 sensor at the time
 	uint8_t ampl_images[4][160*60];
 

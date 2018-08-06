@@ -380,33 +380,77 @@ previous
 					float x = d * cos(ver_ang + sensor_yang) * cos(hor_ang + sensor_ang) + sensor_x;
 					float y = -1* (d * cos(ver_ang + sensor_yang) * sin(hor_ang + sensor_ang)) + sensor_y;
 					float z = d * sin(ver_ang + sensor_yang) + sensor_z;
-
-
-					//fprintf(stderr, "DIST = %.0f  x=%.0f  y=%.0f  z=%.0f  xspot=%d  yspot=%d  ver_ang=%.2f  sensor_yang=%.2f  hor_ang=%.2f  sensor_ang=%.2f\n", d, x, y, z, xspot, yspot, ver_ang, sensor_yang, hor_ang, sensor_ang); 
-
-					if(do_send_pointcloud == 1) // relative to robot
+					if(z > 700 || (z > -180.0 && z < 130.0) || (n_valids > 7 && n_conforming > 5))
 					{
-						if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
-						{
-							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x;
-							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y;
-							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
-							tof3ds[tof3d_wr].n_points++;
-						}
-					}
-					else if(do_send_pointcloud == 2) // in world coordinates
-					{
-						if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
-						{
-							float robot_ang = 0;
-							float x_world = d * cos(ver_ang + sensor_yang) * cos(hor_ang + sensor_ang + robot_ang) + sensor_x + in->robot_pos.x;
-							float y_world = -1* (d * cos(ver_ang + sensor_yang) * sin(hor_ang + sensor_ang + robot_ang)) + sensor_y + in->robot_pos.y;
+						// Data proving level floor is accepted with fewer samples
+						// High-z data is also accepted with fewer samples; else we miss obvious small high obstacles
+						// Otherwise, we require enough samples to be sure.
 
-							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x_world;
-							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y_world;
-							tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
-							tof3ds[tof3d_wr].n_points++;
+						int xspot = (int)(x / (float)TOF3D_HMAP_SPOT_SIZE) + TOF3D_HMAP_XMIDDLE;
+						int yspot = (int)(y / (float)TOF3D_HMAP_SPOT_SIZE) + TOF3D_HMAP_YMIDDLE;
+
+						//printf("DIST = %.0f  x=%.0f  y=%.0f  z=%.0f  xspot=%d  yspot=%d  ver_ang=%.2f  sensor_yang=%.2f  hor_ang=%.2f  sensor_ang=%.2f\n", d, x, y, z, xspot, yspot, ver_ang, sensor_yang, hor_ang, sensor_ang); 
+
+						if(xspot < 0 || xspot >= TOF3D_HMAP_XSPOTS || yspot < 0 || yspot >= TOF3D_HMAP_YSPOTS)
+						{
+							//ignored++;
+							continue;
 						}
+
+	/*					int zi = z;
+						if(zi > -2000 && zi < 2000)
+						{
+							if(zi > hmap_accum[xspot][yspot])
+								hmap_accum[xspot][yspot] = zi;
+							hmap_nsamples[xspot][yspot]++;
+						}
+	*/
+
+						if(do_send_pointcloud == 1) // relative to robot
+						{
+							if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
+							{
+								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x;
+								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y;
+								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
+								tof3ds[tof3d_wr].n_points++;
+							}
+						}
+						else if(do_send_pointcloud == 2) // in world coordinates
+						{
+							if(tof3ds[tof3d_wr].n_points < 4*TOF_XS*TOF_YS)
+							{
+								float robot_ang = ANG32TORAD(-1*in->robot_pos.ang);
+								float x_world = d * cos(ver_ang + sensor_yang) * cos(hor_ang + sensor_ang + robot_ang) + sensor_x + in->robot_pos.x;
+								float y_world = -1* (d * cos(ver_ang + sensor_yang) * sin(hor_ang + sensor_ang + robot_ang)) + sensor_y + in->robot_pos.y;
+
+								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].x = x_world;
+								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].y = y_world;
+								tof3ds[tof3d_wr].cloud[tof3ds[tof3d_wr].n_points].z = z;
+								tof3ds[tof3d_wr].n_points++;
+							}
+						}
+
+						uint8_t new_val = 0;
+						if( z < -230.0)
+							new_val = TOF3D_BIG_DROP;
+						else if(z < -180.0)
+							new_val = TOF3D_SMALL_DROP;
+						else if((d < 600.0 && z < 80.0) || z < 120.0)
+							new_val = TOF3D_FLOOR;
+						else if((d < 600.0 && z < 110.0) || z < 150.0)
+							new_val = TOF3D_THRESHOLD;
+						else if(z < 265.0)
+							new_val = TOF3D_SMALL_ITEM;
+						else if(z < 295.0)
+							new_val = TOF3D_WALL;
+						else if(z < 1500.0)
+							new_val = TOF3D_BIG_ITEM;
+						else if(z < 2050.0)
+							new_val = TOF3D_LOW_CEILING;
+
+						if(new_val > tof3ds[tof3d_wr].objmap[yspot*TOF3D_HMAP_XSPOTS+xspot])
+							tof3ds[tof3d_wr].objmap[yspot*TOF3D_HMAP_XSPOTS+xspot] = new_val;
 					}
 
 				}
@@ -468,6 +512,8 @@ static void process_pulutof_frame(pulutof_frame_t *in)
 	if(sidx == 0)
 	{
 		running_ok = 1;
+		
+		memset(tof3ds[tof3d_wr].objmap, 0, 1*TOF3D_HMAP_YSPOTS*TOF3D_HMAP_XSPOTS);
 		tof3ds[tof3d_wr].n_points = 0;
 	}
 

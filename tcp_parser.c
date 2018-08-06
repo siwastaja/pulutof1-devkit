@@ -82,6 +82,33 @@ void tcp_send_picture(int16_t id, uint8_t bytes_per_pixel, int xs, int ys, uint8
 	free(buf);
 }
 
+void tcp_send_hmap(int xsamps, int ysamps, int32_t ang, int xorig_mm, int yorig_mm, int unit_size_mm, int8_t *hmap)
+{
+	if(xsamps < 1 || xsamps > 256 || ysamps < 1 || ysamps > 256 || unit_size_mm < 2 || unit_size_mm > 200 || !hmap)
+	{
+		printf("ERR: tcp_send_hmap() argument sanity check fail\n");
+		return;
+	}
+
+	int size = 3 + 2+2+4+4+2+1+xsamps*ysamps;
+	uint8_t *buf = malloc(size);
+	buf[0] = TCP_RC_HMAP_MID;
+	buf[1] = ((size-3)>>8)&0xff;
+	buf[2] = (size-3)&0xff;
+
+	I16TOBUF(xsamps, buf, 3);
+	I16TOBUF(ysamps, buf, 5);
+	I16TOBUF((ang>>16), buf, 7);
+	I32TOBUF(xorig_mm, buf, 9);
+	I32TOBUF(yorig_mm, buf, 13);
+	buf[17] = unit_size_mm;
+
+	memcpy(&buf[18], (uint8_t*)hmap, xsamps*ysamps);
+
+	tcp_send(buf, size);
+	free(buf);
+}
+
 int tcp_send_msg(tcp_message_t* msg_type, void* msg)
 {
 	static uint8_t sendbuf[65536];

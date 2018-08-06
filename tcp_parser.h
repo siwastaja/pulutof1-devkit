@@ -56,13 +56,16 @@ typedef struct __attribute__ ((packed))
 
 extern tcp_cr_maintenance_t   msg_cr_maintenance;
 
+#define TCP_RC_HMAP_MID             138
 #define TCP_RC_PICTURE_MID	    142
+
 
 int tcp_parser(int sock);
 
 int tcp_send_msg(tcp_message_t* msg_type, void* msg);
 
 void tcp_send_picture(int16_t id, uint8_t bytes_per_pixel, int xs, int ys, uint8_t *pict);
+void tcp_send_hmap(int xsamps, int ysamps, int32_t ang, int xorig_mm, int yorig_mm, int unit_size_mm, int8_t *hmap);
 
 
 #endif
