@@ -896,12 +896,6 @@ void* pulutof_poll_thread()
 			continue;
 		}
 
-		if(calibrating_offset)
-		{
-			sleep(5);
-			calibrating_offset = 0;
-		}
-
 		read_frame();
 
 
