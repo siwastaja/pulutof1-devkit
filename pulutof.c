@@ -819,7 +819,6 @@ void request_tof_quit()
 	running = 0;
 }
 
-
 void pulutof_command(enum pulutof_commands command_number, int parameter)
 {
    struct spi_ioc_transfer xfer;
@@ -861,7 +860,6 @@ void pulutof_command(enum pulutof_commands command_number, int parameter)
 	 
 } // pulutof_command
 
-
 void* pulutof_poll_thread()
 {
 	gen_ang_tables();
@@ -896,6 +894,12 @@ void* pulutof_poll_thread()
 #endif
 			usleep(1000*avail);
 			continue;
+		}
+
+		if(calibrating_offset)
+		{
+			sleep(5);
+			calibrating_offset = 0;
 		}
 
 		read_frame();
