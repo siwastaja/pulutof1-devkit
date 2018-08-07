@@ -20,6 +20,7 @@
 */
 
 #define _POSIX_C_SOURCE 200809L
+#define _BSD_SOURCE  // glibc backwards incompatibility workaround to bring usleep back.
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,8 +93,39 @@ void request_tof_quit(void);
 
 volatile int retval = 0;
 
+
+void pulutof_set_exposure(int exposure_base)
+{
+   if (exposure_base > 10000) {
+      fprintf(stderr, "ERROR: trying to set exposure base time too big (%d us), set to maximun (10000 us)\n", exposure_base);
+      exposure_base = 10000;
+   } else if (exposure_base < 10.0) {
+      fprintf(stderr, "ERROR: trying to set exposure base time too small (%d us), set to minimun (10 us)\n", exposure_base);
+   } // if-else
+
+   pulutof_command(PULUTOF_COMMAND_EXPOSURE, exposure_base);
+   
+} // pulutof_set_exposure
+
+
+void pulutof_set_hdr_multiplier(int hdr_multiplier)
+{
+   if (hdr_multiplier > 16) {
+      fprintf(stderr, "ERROR: trying to set hdr-multiplier too big (%d), set to maximun (16)\n", hdr_multiplier); 
+      hdr_multiplier = 16;
+   } else if (hdr_multiplier < 2) {
+      fprintf(stderr, "ERROR: trying to set hdr-multiplier too small (%d), set to minimun (2)\n", hdr_multiplier); 
+      hdr_multiplier = 2;
+   } // if-else
+
+   pulutof_command(PULUTOF_COMMAND_HDR_MULTIPLIER, hdr_multiplier);
+
+} // pulutof_set_exposure
+
+
 void* main_thread()
 {
+   char buffer[80];
 
 	if(init_tcp_comm())
 	{
@@ -107,6 +139,7 @@ void* main_thread()
 		int fds_size = 0;
 		if(tcp_listener_sock > fds_size) fds_size = tcp_listener_sock;
 		if(tcp_client_sock > fds_size) fds_size = tcp_client_sock;
+
 		if(STDIN_FILENO > fds_size) fds_size = STDIN_FILENO;
 		fds_size+=1;
 
@@ -125,10 +158,13 @@ void* main_thread()
 			return NULL;
 		}
 
+		
 		if(FD_ISSET(STDIN_FILENO, &fds))
 		{
-			int cmd = fgetc(stdin);
-		   
+			fgets(buffer, sizeof(buffer), stdin);
+
+			int cmd = buffer[0];
+ 		   
 			if(cmd == 'q')
 			{
 				retval = 0;
@@ -146,7 +182,8 @@ void* main_thread()
 			}
 			if(cmd >= '0' && cmd <= '3')
 			{
-				pulutof_cal_offset(cmd-'0');
+			   fprintf(stderr, "Requesting offset calib\n");
+			   pulutof_command(PULUTOF_COMMAND_CALIBRATE_OFFSET, cmd - '0');
 			}
 			if(cmd == 'v')
 			{
@@ -165,6 +202,26 @@ void* main_thread()
 				   send_pointcloud = 0;
 				} // if-else
 			} // if
+			if (cmd == 'm')
+			{
+			   sscanf(buffer+1, "%d", &cmd);
+			   fprintf(stderr, "INFO: Set midlier remove filter %s\n", ((cmd==0)?"OFF":"ON"));
+			   pulutof_command(PULUTOF_COMMAND_MIDLIER_FILTER, cmd != 0);
+			} //if
+			if (cmd == 'e')
+			{
+			   int exposure;
+			   sscanf(buffer+1, "%d", &exposure);
+			   fprintf(stderr, "INFO: Set exposure base time to %d microseconds\n", exposure);
+			   pulutof_set_exposure(exposure);
+			} //if
+			if (cmd == 'h')
+			{
+			   int hdr_multiplier;
+			   sscanf(buffer+1, "%d", &hdr_multiplier);
+			   fprintf(stderr, "INFO: Set exposure time hdr-multiplier to %d\n", hdr_multiplier);
+			   pulutof_set_hdr_multiplier(hdr_multiplier);
+			} //if
 		} // if
 
 
@@ -205,13 +262,20 @@ void* main_thread()
 
 			if(tcp_client_sock >= 0)
 			{
-				if(send_raw_tof >= 0 && send_raw_tof < 4)
-				{
-					tcp_send_picture(100, 2, 160, 60, (uint8_t*)p_tof->raw_depth);
-					tcp_send_picture(101, 2, 160, 60, (uint8_t*)p_tof->ampl_images[send_raw_tof]);
-				}
-			}
+				static int hmap_cnt = 0;
+				hmap_cnt++;
 
+				if(hmap_cnt >= 4)
+				{
+					tcp_send_hmap(TOF3D_HMAP_XSPOTS, TOF3D_HMAP_YSPOTS, p_tof->robot_pos.ang, p_tof->robot_pos.x, p_tof->robot_pos.y, TOF3D_HMAP_SPOT_SIZE, p_tof->objmap);			   
+				   	if(send_raw_tof >= 0 && send_raw_tof < 4)
+					{
+						tcp_send_picture(100, 2, 160, 60, (uint8_t*)p_tof->raw_depth);
+						tcp_send_picture(101, 2, 160, 60, (uint8_t*)p_tof->ampl_images[send_raw_tof]);
+					}
+					hmap_cnt = 0;
+				}
+			}			
 		}
 
 	}
@@ -222,46 +286,73 @@ void* main_thread()
 }
 
 
-void* start_tof(void*);
+void pulutof_print_info(char* command_name)
+{
+   fprintf(stderr,
+	   "\n"
+	   "Usage: %s [Options]\n"
+	   "Options:\n"
+	   " -p           \t A continuous pointcloud output to stdout\n"
+	   " -m 0|1       \t Midlier filter off/on (default on)\n"
+	   " -e 10..10000 \t Exposure time base in microseconds (default 80 us)\n"
+	   " -h 2..16     \t Hdr-multiplier for exposure time (default 7)\n"
+	   "\n"
+	   "Exits with q\n\n",
+	   command_name);
+   
+} // pulutof_print_info
+
 
 int main(int argc, char** argv)
 {
 	pthread_t thread_main, thread_tof, thread_tof2;
 
 	int ret, opt;
-
-	while ((opt = getopt(argc, argv, "p?")) != -1) {
-	   switch (opt) {
-	   case 'p':  
-	      send_pointcloud = -1;
-	      break;
-	   default: /* '?' */
-	      fprintf(stderr,
-		      "Usage: %s [-p]\n"
-		      "Options:\n -p\t\t A continuous pointcloud output to stdout\n\n"
-		      "Exits with q\n\n",
-		      argv[0]);
-	      exit(EXIT_FAILURE);
-	   }
-	}
+	
        
 	if ( (ret = pthread_create(&thread_main, NULL, main_thread, NULL)) ) {	   
 	   fprintf(stderr, "ERROR: main thread creation, ret = %d\n", ret);
 	   return EXIT_FAILURE;
-	}
+	} // if
 
 	if ( (ret = pthread_create(&thread_tof, NULL, pulutof_poll_thread, NULL)) ) {
 	   fprintf(stderr, "ERROR: tof3d access thread creation, ret = %d\n", ret);
 	   return EXIT_FAILURE;
-	}
+	} // if
 
 	#ifndef PULUTOF1_GIVE_RAWS
-		if ( (ret = pthread_create(&thread_tof2, NULL, pulutof_processing_thread, NULL)) )
-		{
-			fprintf(stderr, "ERROR: tof3d processing thread creation, ret = %d\n", ret);
-			return -1;
-		}
+	if ( (ret = pthread_create(&thread_tof2, NULL, pulutof_processing_thread, NULL)) ) {
+	   fprintf(stderr, "ERROR: tof3d processing thread creation, ret = %d\n", ret);
+	   return -1;
+	} // if
 	#endif
+
+	usleep(10000); // gives processsor time for threads started above
+
+	while ((opt = getopt(argc, argv, "pm:e:h:?")) != -1) {
+	   switch (opt) {
+	   case 'p':  
+	      send_pointcloud = -1;
+	      break;
+	   case 'm':
+	      pulutof_command(PULUTOF_COMMAND_MIDLIER_FILTER, *optarg != '0');
+	      break;
+	   case 'e':
+	      pulutof_set_exposure(atoi(optarg));
+	      break;
+	   case 'h':
+	      pulutof_set_hdr_multiplier(atoi(optarg));
+	      break;
+	   default: /* '?' */
+	      pulutof_print_info(argv[0]);
+	      exit(EXIT_FAILURE);
+	   } // switch
+	} // while
+
+	if (argv[optind] != NULL) {
+	   pulutof_print_info(argv[0]);
+	   exit(EXIT_FAILURE);
+	} // if
 
 	pthread_join(thread_main, NULL);
 
@@ -271,4 +362,5 @@ int main(int argc, char** argv)
 	#endif
 
 	return retval;
-}
+
+} // main
