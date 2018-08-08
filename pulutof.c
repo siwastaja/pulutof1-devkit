@@ -844,7 +844,7 @@ void pulutof_command(enum pulutof_commands command_number, int parameter)
       configurate = true;
                
       if (command_number == PULUTOF_COMMAND_CALIBRATE_OFFSET) {
-	 sleep(3);                                               // sleep enough flashing done to be able poll PuluToF
+	 sleep(7);                                               // sleep enough flashing done to be able poll PuluToF
       } else {
 	 sleep(1);                                               // sleep enough to be able poll PuluToF (no flashing)
       } // if-else
